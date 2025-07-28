@@ -3,35 +3,221 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>OpenTTD Scenario Helper v0.05</title>
+<title>OpenTTD Map Selector Prototype</title>
+
+<!-- Leaflet CSS -->
 <link
   rel="stylesheet"
   href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
 />
-<link rel="stylesheet" href="styles.css" />
+
+<style>
+  /* OpenTTD classic UI inspired styles */
+  body {
+    margin: 0;
+    font-family: 'Verdana', Geneva, Tahoma, sans-serif;
+    background: #C0C0C0; /* light gray typical background */
+    color: #000;
+    display: flex;
+    height: 100vh;
+    user-select: none;
+  }
+
+  #sidebar {
+    width: 320px;
+    background: #f0e68c; /* khaki, a retro color */
+    border-right: 3px solid #6a4a00;
+    padding: 10px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    font-size: 14px;
+  }
+
+  #sidebar h1 {
+    font-size: 20px;
+    margin: 0 0 10px 0;
+    color: #4b4b00;
+    text-shadow: 1px 1px 0 #fff;
+  }
+
+  #map {
+    flex: 1;
+  }
+
+  button {
+    background: #ded17e;
+    border: 2px solid #6a4a00;
+    padding: 6px 10px;
+    margin: 8px 0;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 1px 1px 0 #fff inset;
+    transition: background 0.2s ease;
+  }
+  button:hover {
+    background: #f3f5a8;
+  }
+
+  #coords {
+    background: #fff;
+    border: 2px inset #6a4a00;
+    padding: 6px;
+    margin-top: 10px;
+    min-height: 90px;
+    white-space: pre-wrap;
+    font-family: monospace;
+  }
+
+  /* Leaflet container height */
+  #map {
+    height: 100vh;
+  }
+</style>
 </head>
 <body>
-  <h1>
-    OpenTTD Scenario Helper <span id="version"></span>
-  </h1>
+  <div id="sidebar">
+    <h1>OpenTTD Map Selector</h1>
+    <p>Select an area on the map by dragging a rectangle.</p>
+    <button id="clearBtn">Clear Selection</button>
+    <button id="generateBtn">Generate Heightmap</button>
 
-  <div class="controls">
-    <label for="mapWidth">Map Width:</label>
-    <select id="mapWidth"></select>
+    <h3>Selected Area Coordinates:</h3>
+    <div id="coords">No area selected.</div>
 
-    <label for="mapHeight">Map Height:</label>
-    <select id="mapHeight"></select>
-
-    <button id="toggleBox">Show Heightmap Selection</button>
+    <hr />
+    <div><em>Future features:</em></div>
+    <ul>
+      <li>Place settlements</li>
+      <li>Place industries</li>
+      <li>Export scenario files</li>
+      <li>Heightmap preview</li>
+    </ul>
   </div>
 
-  <div id="map">
-    <div id="bbox" style="display:none;"></div>
-  </div>
+  <div id="map"></div>
 
-  <script
-    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-  ></script>
-  <script src="app.js"></script>
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Leaflet Draw plugin for rectangle drawing -->
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/leaflet-draw@1.0.4/dist/leaflet.draw.css"
+  />
+  <script src="https://cdn.jsdelivr.net/npm/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+
+  <script>
+    // Initialize map
+    const map = L.map('map').setView([52.5, 13.4], 6); // Centered on Europe
+
+    // Add OpenStreetMap tiles
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    }).addTo(map);
+
+    // FeatureGroup to store editable layers
+    const drawnItems = new L.FeatureGroup();
+    map.addLayer(drawnItems);
+
+    // Add draw control with only rectangle enabled
+    const drawControl = new L.Control.Draw({
+      draw: {
+        polygon: false,
+        polyline: false,
+        circle: false,
+        circlemarker: false,
+        marker: false,
+        rectangle: {
+          shapeOptions: {
+            color: '#6a4a00',
+            weight: 3,
+            fillOpacity: 0.2,
+          },
+        },
+      },
+      edit: {
+        featureGroup: drawnItems,
+        edit: true,
+        remove: true,
+      },
+    });
+    map.addControl(drawControl);
+
+    const coordsDiv = document.getElementById('coords');
+    let selectedRect = null;
+
+    function updateCoords(rect) {
+      if (!rect) {
+        coordsDiv.textContent = 'No area selected.';
+        return;
+      }
+      const bounds = rect.getBounds();
+      const ne = bounds.getNorthEast();
+      const sw = bounds.getSouthWest();
+      coordsDiv.textContent =
+        `NorthEast (lat, lon): ${ne.lat.toFixed(6)}, ${ne.lng.toFixed(6)}\n` +
+        `SouthWest (lat, lon): ${sw.lat.toFixed(6)}, ${sw.lng.toFixed(6)}`;
+    }
+
+    map.on(L.Draw.Event.CREATED, function (event) {
+      // Remove previous rectangle
+      drawnItems.clearLayers();
+      const layer = event.layer;
+      drawnItems.addLayer(layer);
+      selectedRect = layer;
+      updateCoords(layer);
+    });
+
+    map.on(L.Draw.Event.EDITED, function (event) {
+      const layers = event.layers;
+      layers.eachLayer(function (layer) {
+        selectedRect = layer;
+        updateCoords(layer);
+      });
+    });
+
+    map.on(L.Draw.Event.DELETED, function (event) {
+      selectedRect = null;
+      updateCoords(null);
+    });
+
+    // Clear button
+    document.getElementById('clearBtn').addEventListener('click', () => {
+      drawnItems.clearLayers();
+      selectedRect = null;
+      updateCoords(null);
+    });
+
+    // Generate button - mock function: output JSON of bounds or alert if none selected
+    document.getElementById('generateBtn').addEventListener('click', () => {
+      if (!selectedRect) {
+        alert('Please select an area first!');
+        return;
+      }
+      const bounds = selectedRect.getBounds();
+      const data = {
+        northEast: {
+          lat: bounds.getNorthEast().lat,
+          lon: bounds.getNorthEast().lng,
+        },
+        southWest: {
+          lat: bounds.getSouthWest().lat,
+          lon: bounds.getSouthWest().lng,
+        },
+      };
+      // For now, just output JSON to console and prompt download
+      console.log('Heightmap area data:', data);
+
+      const dataStr =
+        'data:text/json;charset=utf-8,' +
+        encodeURIComponent(JSON.stringify(data, null, 2));
+      const dlAnchorElem = document.createElement('a');
+      dlAnchorElem.setAttribute('href', dataStr);
+      dlAnchorElem.setAttribute('download', 'heightmap_area.json');
+      dlAnchorElem.click();
+    });
+  </script>
 </body>
 </html>
