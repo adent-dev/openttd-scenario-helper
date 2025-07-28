@@ -47,12 +47,28 @@
 <div id="controls">
   <label>
     Width (tiles):
-    <input type="number" id="mapWidth" value="512" min="1" />
+    <select id="mapWidth">
+      <option>64</option>
+      <option>128</option>
+      <option>256</option>
+      <option selected>512</option>
+      <option>1024</option>
+      <option>2048</option>
+      <option>4096</option>
+    </select>
   </label>
   <br />
   <label>
     Height (tiles):
-    <input type="number" id="mapHeight" value="512" min="1" />
+    <select id="mapHeight">
+      <option>64</option>
+      <option>128</option>
+      <option>256</option>
+      <option selected>512</option>
+      <option>1024</option>
+      <option>2048</option>
+      <option>4096</option>
+    </select>
   </label>
   <br />
   <button id="toggleBoxBtn">Select Heightmap</button>
@@ -111,10 +127,10 @@
     }
   });
 
-  mapWidthInput.addEventListener('input', () => {
+  mapWidthInput.addEventListener('change', () => {
     if (boxVisible) updateSelectionBoxSize();
   });
-  mapHeightInput.addEventListener('input', () => {
+  mapHeightInput.addEventListener('change', () => {
     if (boxVisible) updateSelectionBoxSize();
   });
   window.addEventListener('resize', () => {
