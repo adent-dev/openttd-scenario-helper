@@ -4,225 +4,210 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>OpenTTD Scenario Helper</title>
-<link
-  rel="stylesheet"
-  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-/>
 <style>
-  html, body, #map {
-    height: 100%;
-    margin: 0;
-    padding: 0;
+  body, html {
+    margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: sans-serif;
+    display: flex; flex-direction: column;
   }
   #map {
+    flex-grow: 1;
+    width: 100%;
     position: relative;
   }
-  #controls {
+  #bbox {
     position: absolute;
-    top: 10px;
-    left: 10px;
-    background: rgba(255 255 255 / 0.9);
+    border: 2px solid red;
+    pointer-events: none;
+    box-sizing: border-box;
+  }
+  #controls {
     padding: 8px;
-    z-index: 1000;
-    border-radius: 4px;
-    font-family: sans-serif;
+    background: #222;
+    color: #eee;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+  }
+  select, input[type=number], button {
+    padding: 6px;
     font-size: 14px;
   }
   #version {
-    display: block;
-    margin-top: 6px;
-    font-size: 12px;
-    color: #666;
-  }
-  #selection-box {
-    position: absolute;
-    border: 3px solid orange;
-    pointer-events: none;
-    box-sizing: border-box;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    display: none;
-    z-index: 999;
-    background: rgba(255, 165, 0, 0.1);
+    margin-left: auto;
+    font-size: 14px;
+    opacity: 0.6;
   }
 </style>
+<link
+  href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"
+  rel="stylesheet"
+/>
 </head>
 <body>
-<div id="map"></div>
 
 <div id="controls">
-  <label>
-    Width (tiles):
-    <select id="mapWidth">
-      <option>64</option>
-      <option>128</option>
-      <option>256</option>
-      <option selected>512</option>
-      <option>1024</option>
-      <option>2048</option>
-      <option>4096</option>
-    </select>
-  </label>
-  <br />
-  <label>
-    Height (tiles):
-    <select id="mapHeight">
-      <option>64</option>
-      <option>128</option>
-      <option>256</option>
-      <option selected>512</option>
-      <option>1024</option>
-      <option>2048</option>
-      <option>4096</option>
-    </select>
-  </label>
-  <br />
-  <button id="toggleBoxBtn">Select Heightmap</button>
-  <button id="getBoundsBtn">Get Bounds</button>
-  <button id="exportBtn">Export JSON</button>
-  <input type="file" id="importFile" style="display:none" accept="application/json">
-  <button id="importBtn">Import JSON</button>
-  <button id="toggleSavedBoundsBtn">Toggle Saved Bounds</button>
-  <span id="version"></span>
+  <label for="mapWidth">Map Width:</label>
+  <select id="mapWidth"></select>
+
+  <label for="mapHeight">Map Height:</label>
+  <select id="mapHeight"></select>
+
+  <button id="toggleBBoxBtn">Select Heightmap</button>
+  <button id="generateHeightmapBtn">Generate Heightmap</button>
+
+  <button id="exportBtn">Export</button>
+  <input type="file" id="importFile" style="display:none" accept=".json" />
+  <button id="importBtn">Import</button>
+
+  <div id="version"></div>
 </div>
 
-<div id="selection-box"></div>
+<div id="map"></div>
+<div id="bbox" style="display:none"></div>
 
-<script
-  src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-  crossorigin=""
-></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-  const APP_VERSION = "v0.1.4";
-  document.getElementById('version').textContent = APP_VERSION;
+  // VERSION
+  const APP_VERSION = '0.05';
 
-  const map = L.map('map').setView([20, 0], 2);
-
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap contributors'
-  }).addTo(map);
-
-  const selectionBox = document.getElementById('selection-box');
-  const toggleBoxBtn = document.getElementById('toggleBoxBtn');
-  const getBoundsBtn = document.getElementById('getBoundsBtn');
+  // Elements
+  const mapDiv = document.getElementById('map');
+  const bboxDiv = document.getElementById('bbox');
+  const toggleBBoxBtn = document.getElementById('toggleBBoxBtn');
+  const generateHeightmapBtn = document.getElementById('generateHeightmapBtn');
   const exportBtn = document.getElementById('exportBtn');
   const importBtn = document.getElementById('importBtn');
   const importFile = document.getElementById('importFile');
-  const toggleSavedBoundsBtn = document.getElementById('toggleSavedBoundsBtn');
-  const mapWidthInput = document.getElementById('mapWidth');
-  const mapHeightInput = document.getElementById('mapHeight');
+  const versionDiv = document.getElementById('version');
+  const mapWidthSelect = document.getElementById('mapWidth');
+  const mapHeightSelect = document.getElementById('mapHeight');
+
+  versionDiv.textContent = `Version: ${APP_VERSION}`;
+
+  // Common OpenTTD map sizes (powers of two between 64 and 4096)
+  const mapSizes = [64,128,256,512,1024,2048,4096];
+
+  function populateSelect(selectEl) {
+    mapSizes.forEach(sz => {
+      const opt = document.createElement('option');
+      opt.value = sz;
+      opt.textContent = sz;
+      selectEl.appendChild(opt);
+    });
+  }
+  populateSelect(mapWidthSelect);
+  populateSelect(mapHeightSelect);
+
+  // Default selected sizes
+  mapWidthSelect.value = '512';
+  mapHeightSelect.value = '512';
+
+  // Initialize Leaflet map with OpenStreetMap tiles
+  const map = L.map('map', {
+    center: [52.5, 13.4], // Berlin default center
+    zoom: 6,
+    minZoom: 2,
+    maxZoom: 18,
+  });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors',
+  }).addTo(map);
 
   let boxVisible = false;
-  let savedBoundsLayer = null;
-  let savedBoundsVisible = true;
 
-  function updateSelectionBoxSize() {
-    const widthTiles = parseInt(mapWidthInput.value, 10) || 1;
-    const heightTiles = parseInt(mapHeightInput.value, 10) || 1;
-
-    const aspectRatio = widthTiles / heightTiles;
-
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-
-    let boxWidth, boxHeight;
-
-    if (vw / vh > aspectRatio) {
-      boxHeight = vh * 0.8;
-      boxWidth = boxHeight * aspectRatio;
-    } else {
-      boxWidth = vw * 0.8;
-      boxHeight = boxWidth / aspectRatio;
+  function updateBoundingBox() {
+    if (!boxVisible) {
+      bboxDiv.style.display = 'none';
+      return;
     }
 
-    selectionBox.style.width = `${boxWidth}px`;
-    selectionBox.style.height = `${boxHeight}px`;
+    bboxDiv.style.display = 'block';
+
+    // The bbox is centered on the map container
+    const mapRect = mapDiv.getBoundingClientRect();
+
+    // Get user width/height map size
+    const w = parseInt(mapWidthSelect.value, 10);
+    const h = parseInt(mapHeightSelect.value, 10);
+
+    // Calculate bounding box size to fit aspect ratio inside map div
+    // Max width and height to fit inside mapDiv
+    let maxW = mapRect.width * 0.8;  // 80% of map width
+    let maxH = mapRect.height * 0.8; // 80% of map height
+
+    // Compute scale to fit bounding box inside the max area while preserving ratio
+    let scale = Math.min(maxW / w, maxH / h);
+
+    const boxWidth = w * scale;
+    const boxHeight = h * scale;
+
+    // Position bbox at center of map container
+    bboxDiv.style.width = `${boxWidth}px`;
+    bboxDiv.style.height = `${boxHeight}px`;
+    bboxDiv.style.left = `${(mapRect.width - boxWidth) / 2}px`;
+    bboxDiv.style.top = `${(mapRect.height - boxHeight) / 2}px`;
   }
 
-  toggleBoxBtn.addEventListener('click', () => {
+  // Update bbox on window resize or map move (so the container size stays updated)
+  window.addEventListener('resize', updateBoundingBox);
+  map.on('resize', updateBoundingBox);
+  map.on('move', () => {
+    // bounding box is static overlay, no update needed on move
+  });
+
+  toggleBBoxBtn.addEventListener('click', () => {
     boxVisible = !boxVisible;
-    selectionBox.style.display = boxVisible ? 'block' : 'none';
-    toggleBoxBtn.textContent = boxVisible ? 'Hide Heightmap' : 'Select Heightmap';
-
-    if (boxVisible) {
-      updateSelectionBoxSize();
-    }
+    toggleBBoxBtn.textContent = boxVisible ? 'Hide Heightmap Selection' : 'Select Heightmap';
+    updateBoundingBox();
   });
 
-  mapWidthInput.addEventListener('change', () => {
-    if (boxVisible) updateSelectionBoxSize();
-  });
-  mapHeightInput.addEventListener('change', () => {
-    if (boxVisible) updateSelectionBoxSize();
-  });
-  window.addEventListener('resize', () => {
-    if (boxVisible) updateSelectionBoxSize();
-  });
-
+  // Get bounding box lat/lng for bbox overlay area
   function getBoundingBoxLatLng() {
-    const box = selectionBox.getBoundingClientRect();
-    const mapContainer = map.getContainer().getBoundingClientRect();
+    const mapRect = mapDiv.getBoundingClientRect();
 
-    const left = box.left - mapContainer.left;
-    const right = box.right - mapContainer.left;
-    const top = box.top - mapContainer.top;
-    const bottom = box.bottom - mapContainer.top;
+    const w = parseInt(mapWidthSelect.value, 10);
+    const h = parseInt(mapHeightSelect.value, 10);
 
-    const nw = map.containerPointToLatLng([left, top]);
-    const se = map.containerPointToLatLng([right, bottom]);
+    let maxW = mapRect.width * 0.8;
+    let maxH = mapRect.height * 0.8;
+    let scale = Math.min(maxW / w, maxH / h);
+
+    const boxWidth = w * scale;
+    const boxHeight = h * scale;
+
+    // bbox center relative to map container top-left
+    const centerX = mapRect.width / 2;
+    const centerY = mapRect.height / 2;
+
+    // Top-left and bottom-right pixels of bounding box in container coords
+    const bboxTopLeft = L.point(centerX - boxWidth / 2, centerY - boxHeight / 2);
+    const bboxBottomRight = L.point(centerX + boxWidth / 2, centerY + boxHeight / 2);
+
+    // Convert container pixels to latlng
+    const nw = map.containerPointToLatLng(bboxTopLeft);
+    const se = map.containerPointToLatLng(bboxBottomRight);
 
     return { nw, se };
   }
 
-  function drawSavedBounds(nw, se) {
-    if (savedBoundsLayer) {
-      map.removeLayer(savedBoundsLayer);
-    }
-    savedBoundsLayer = L.rectangle([[nw.lat, nw.lng], [se.lat, se.lng]], {
-      color: 'blue',
-      weight: 2,
-      fillOpacity: 0.2
-    }).addTo(map);
-    if (!savedBoundsVisible) {
-      map.removeLayer(savedBoundsLayer);
-    }
-  }
-
-  getBoundsBtn.addEventListener('click', () => {
-    if (!boxVisible) {
-      alert("Please enable the heightmap selection box first.");
-      return;
-    }
-
-    const { nw, se } = getBoundingBoxLatLng();
-
-    alert(`Bounding Box:\nNW: ${nw.lat.toFixed(4)}, ${nw.lng.toFixed(4)}\nSE: ${se.lat.toFixed(4)}, ${se.lng.toFixed(4)}`);
-  });
-
+  // Import/Export JSON for settings & map state
   exportBtn.addEventListener('click', () => {
-    if (!boxVisible) {
-      alert("Enable the selection box first.");
-      return;
-    }
-
-    const { nw, se } = getBoundingBoxLatLng();
     const data = {
       version: APP_VERSION,
-      mapWidth: mapWidthInput.value,
-      mapHeight: mapHeightInput.value,
-      bounds: { nw, se },
+      mapWidth: mapWidthSelect.value,
+      mapHeight: mapHeightSelect.value,
       center: map.getCenter(),
-      zoom: map.getZoom()
+      zoom: map.getZoom(),
+      bboxVisible: boxVisible,
     };
-
-    drawSavedBounds(nw, se);
-
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
+
+    const a = document.createElement('a');
     a.href = url;
-    a.download = "openttd_map_selection.json";
+    a.download = 'openttd_scenario_helper_export.json';
     a.click();
     URL.revokeObjectURL(url);
   });
@@ -231,51 +216,163 @@
     importFile.click();
   });
 
-  importFile.addEventListener('change', (event) => {
-    const file = event.target.files[0];
+  importFile.addEventListener('change', e => {
+    const file = e.target.files[0];
     if (!file) return;
-
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = evt => {
       try {
-        const data = JSON.parse(e.target.result);
-
-        mapWidthInput.value = data.mapWidth;
-        mapHeightInput.value = data.mapHeight;
-
-        if (data.center && data.zoom) {
+        const data = JSON.parse(evt.target.result);
+        if (data.version && data.mapWidth && data.mapHeight && data.center && data.zoom !== undefined) {
+          mapWidthSelect.value = data.mapWidth;
+          mapHeightSelect.value = data.mapHeight;
           map.setView([data.center.lat, data.center.lng], data.zoom);
+          boxVisible = !!data.bboxVisible;
+          toggleBBoxBtn.textContent = boxVisible ? 'Hide Heightmap Selection' : 'Select Heightmap';
+          updateBoundingBox();
+        } else {
+          alert('Invalid import file.');
         }
-
-        if (data.bounds && data.bounds.nw && data.bounds.se) {
-          drawSavedBounds(data.bounds.nw, data.bounds.se);
-        }
-
-        if (!boxVisible) {
-          boxVisible = true;
-          selectionBox.style.display = 'block';
-          toggleBoxBtn.textContent = 'Hide Heightmap';
-        }
-
-        updateSelectionBoxSize();
-        alert("Map selection imported successfully!");
-      } catch (err) {
-        alert("Invalid JSON file.");
+      } catch {
+        alert('Failed to parse import file.');
       }
+      importFile.value = '';
     };
     reader.readAsText(file);
   });
 
-  toggleSavedBoundsBtn.addEventListener('click', () => {
-    savedBoundsVisible = !savedBoundsVisible;
-    if (savedBoundsLayer) {
-      if (savedBoundsVisible) {
-        map.addLayer(savedBoundsLayer);
-      } else {
-        map.removeLayer(savedBoundsLayer);
+  // HEIGHTMAP GENERATION
+
+  async function fetchElevationBatch(coords) {
+    const url = 'https://api.open-elevation.com/api/v1/lookup';
+    const body = JSON.stringify({ locations: coords });
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+      });
+      if (!response.ok) throw new Error(`API error: ${response.status}`);
+      const data = await response.json();
+      return data.results.map(r => r.elevation);
+    } catch (e) {
+      alert('Failed to fetch elevation data: ' + e.message);
+      return null;
+    }
+  }
+
+  function latLngLerp(lat1, lng1, lat2, lng2, tX, tY) {
+    const lat = lat1 + (lat2 - lat1) * tY;
+    const lng = lng1 + (lng2 - lng1) * tX;
+    return { lat, lng };
+  }
+
+  generateHeightmapBtn.addEventListener('click', async () => {
+    if (!boxVisible) {
+      alert("Enable the heightmap selection box first.");
+      return;
+    }
+
+    const { nw, se } = getBoundingBoxLatLng();
+    const mapWidth = parseInt(mapWidthSelect.value, 10);
+    const mapHeight = parseInt(mapHeightSelect.value, 10);
+
+    // Use smaller sample grid for API limits
+    const sampleWidth = Math.min(128, mapWidth);
+    const sampleHeight = Math.min(128, mapHeight);
+
+    // Generate coords to query
+    const coords = [];
+    for (let y = 0; y < sampleHeight; y++) {
+      for (let x = 0; x < sampleWidth; x++) {
+        const tX = x / (sampleWidth - 1);
+        const tY = y / (sampleHeight - 1);
+        const { lat, lng } = latLngLerp(nw.lat, nw.lng, se.lat, se.lng, tX, tY);
+        coords.push({ latitude: lat, longitude: lng });
       }
     }
+
+    // Open-Elevation limits: batch max 100 locations per request
+    const elevations = [];
+    for (let i = 0; i < coords.length; i += 100) {
+      const batch = coords.slice(i, i + 100);
+      const batchElevations = await fetchElevationBatch(batch);
+      if (!batchElevations) return;
+      elevations.push(...batchElevations);
+      await new Promise(res => setTimeout(res, 200)); // delay to avoid rate limit
+    }
+
+    // Normalize elevation values 0-255
+    const minElev = Math.min(...elevations);
+    const maxElev = Math.max(...elevations);
+    const elevRange = maxElev - minElev || 1;
+
+    // Create canvas for final heightmap image
+    const canvas = document.createElement('canvas');
+    canvas.width = mapWidth;
+    canvas.height = mapHeight;
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.createImageData(mapWidth, mapHeight);
+    const data = imageData.data;
+
+    function getElevationAt(x, y) {
+      const fx = x * (sampleWidth - 1) / (mapWidth - 1);
+      const fy = y * (sampleHeight - 1) / (mapHeight - 1);
+
+      const x0 = Math.floor(fx);
+      const x1 = Math.min(x0 + 1, sampleWidth - 1);
+      const y0 = Math.floor(fy);
+      const y1 = Math.min(y0 + 1, sampleHeight - 1);
+
+      const dx = fx - x0;
+      const dy = fy - y0;
+
+      const i00 = y0 * sampleWidth + x0;
+      const i10 = y0 * sampleWidth + x1;
+      const i01 = y1 * sampleWidth + x0;
+      const i11 = y1 * sampleWidth + x1;
+
+      const v00 = elevations[i00];
+      const v10 = elevations[i10];
+      const v01 = elevations[i01];
+      const v11 = elevations[i11];
+
+      // Bilinear interpolation
+      const v0 = v00 * (1 - dx) + v10 * dx;
+      const v1 = v01 * (1 - dx) + v11 * dx;
+      return v0 * (1 - dy) + v1 * dy;
+    }
+
+    // Fill image data with grayscale pixels
+    for (let y = 0; y < mapHeight; y++) {
+      for (let x = 0; x < mapWidth; x++) {
+        const elev = getElevationAt(x, y);
+        const norm = (elev - minElev) / elevRange;
+        const gray = Math.round(norm * 255);
+        const idx = (y * mapWidth + x) * 4;
+        data[idx] = gray;
+        data[idx + 1] = gray;
+        data[idx + 2] = gray;
+        data[idx + 3] = 255;
+      }
+    }
+    ctx.putImageData(imageData, 0, 0);
+
+    // Download generated heightmap PNG
+    canvas.toBlob(blob => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `heightmap_${mapWidth}x${mapHeight}.png`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
   });
+
+  // Initial bounding box update
+  updateBoundingBox();
+
 </script>
+
 </body>
 </html>
