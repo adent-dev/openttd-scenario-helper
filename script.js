@@ -1,4 +1,4 @@
-const APP_VERSION = "v0.04.02";
+const APP_VERSION = "v0.05";
 
 // Set version in UI
 document.getElementById("page-title").innerText = `OpenTTD Scenario Helper ${APP_VERSION}`;
@@ -15,22 +15,40 @@ function drawSelectionBox() {
     const widthTiles = parseInt(document.getElementById('mapWidth').value);
     const heightTiles = parseInt(document.getElementById('mapHeight').value);
     const center = map.getCenter();
+    const bounds = map.getBounds();
 
-    // Correct aspect ratio: longitude shrinks by cos(latitude)
+    // Aspect ratio corrected for latitude (longitude degrees shrink by cos(lat))
     const latCorrection = Math.cos(center.lat * Math.PI / 180);
-    const aspectRatio = (widthTiles / heightTiles) * latCorrection;
+    const desiredAspect = (widthTiles / heightTiles) * latCorrection;
 
-    const scale = 0.5; // controls box size relative to map view
-    const halfLat = scale;
-    const halfLng = halfLat * aspectRatio;
+    // Viewport size in degrees
+    const latDiff = bounds.getNorth() - bounds.getSouth();
+    const lngDiff = bounds.getEast() - bounds.getWest();
 
-    const bounds = L.latLngBounds(
-        [center.lat - halfLat, center.lng - halfLng],
-        [center.lat + halfLat, center.lng + halfLng]
-    );
+    // Viewport aspect ratio (longitude / latitude)
+    const viewportAspect = lngDiff / latDiff;
+
+    let boxLatDiff, boxLngDiff;
+
+    if (viewportAspect > desiredAspect) {
+        // Viewport wider than desired → limit box height
+        boxLatDiff = latDiff;
+        boxLngDiff = boxLatDiff * desiredAspect;
+    } else {
+        // Viewport taller than desired → limit box width
+        boxLngDiff = lngDiff;
+        boxLatDiff = boxLngDiff / desiredAspect;
+    }
+
+    const south = center.lat - boxLatDiff / 2;
+    const north = center.lat + boxLatDiff / 2;
+    const west = center.lng - boxLngDiff / 2;
+    const east = center.lng + boxLngDiff / 2;
+
+    const boxBounds = L.latLngBounds([south, west], [north, east]);
 
     if (selectionRect) map.removeLayer(selectionRect);
-    selectionRect = L.rectangle(bounds, {color: "#ff7800", weight: 2});
+    selectionRect = L.rectangle(boxBounds, {color: "#ff7800", weight: 2});
     selectionRect.addTo(map);
 }
 
