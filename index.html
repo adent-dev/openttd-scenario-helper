@@ -30,13 +30,14 @@
   #selection-box {
     position: absolute;
     border: 3px solid orange;
-    pointer-events: none; /* let map interactions pass through */
+    pointer-events: none; /* pass events through */
     box-sizing: border-box;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
     display: none;
     z-index: 999;
+    background: rgba(255, 165, 0, 0.1);
   }
 </style>
 </head>
@@ -81,22 +82,17 @@
     const widthTiles = parseInt(mapWidthInput.value, 10) || 1;
     const heightTiles = parseInt(mapHeightInput.value, 10) || 1;
 
-    // Calculate aspect ratio (width / height)
     const aspectRatio = widthTiles / heightTiles;
 
-    // Get viewport size
     const vw = window.innerWidth;
     const vh = window.innerHeight;
 
     let boxWidth, boxHeight;
 
-    // Fit box inside viewport keeping aspect ratio, max 80% of viewport size
     if (vw / vh > aspectRatio) {
-      // viewport wider than box → limit by height
       boxHeight = vh * 0.8;
       boxWidth = boxHeight * aspectRatio;
     } else {
-      // viewport taller than box → limit by width
       boxWidth = vw * 0.8;
       boxHeight = boxWidth / aspectRatio;
     }
@@ -115,6 +111,15 @@
     }
   });
 
-  // Update box size if inputs or window size change (and box is visible)
   mapWidthInput.addEventListener('input', () => {
     if (boxVisible) updateSelectionBoxSize();
+  });
+  mapHeightInput.addEventListener('input', () => {
+    if (boxVisible) updateSelectionBoxSize();
+  });
+  window.addEventListener('resize', () => {
+    if (boxVisible) updateSelectionBoxSize();
+  });
+</script>
+</body>
+</html>
