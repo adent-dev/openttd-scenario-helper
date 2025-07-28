@@ -1,60 +1,55 @@
-// Initialize map
 const map = L.map('map').setView([20, 0], 2);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap contributors'
 }).addTo(map);
 
 let selectionRect = null;
-let aspectRatio = 512 / 1024; // default width / height
 
-function updateAspectRatio() {
+function updateSelectionBox() {
     const width = parseInt(document.getElementById('mapWidth').value);
     const height = parseInt(document.getElementById('mapHeight').value);
-    aspectRatio = width / height;
+    const aspectRatio = width / height;
+
+    // Get current map center
+    const center = map.getCenter();
+    const bounds = map.getBounds();
+    const latDiff = Math.abs(bounds.getNorth() - bounds.getSouth());
+    const lngDiff = Math.abs(bounds.getEast() - bounds.getWest());
+
+    // We’ll base box size on 60% of the smaller map dimension, scaled by aspect ratio
+    let boxLat = latDiff * 0.3;
+    let boxLng = boxLat * aspectRatio;
+
+    if (boxLng > lngDiff * 0.6) {
+        boxLng = lngDiff * 0.3;
+        boxLat = boxLng / aspectRatio;
+    }
+
+    const boxBounds = L.latLngBounds(
+        [center.lat - boxLat, center.lng - boxLng],
+        [center.lat + boxLat, center.lng + boxLng]
+    );
+
+    if (selectionRect) {
+        map.removeLayer(selectionRect);
+    }
+    selectionRect = L.rectangle(boxBounds, {color: "#ff7800", weight: 2});
+    selectionRect.addTo(map);
 }
-document.getElementById('mapWidth').addEventListener('change', updateAspectRatio);
-document.getElementById('mapHeight').addEventListener('change', updateAspectRatio);
 
-// Selection logic
-map.on('mousedown', function (e) {
-    if (selectionRect) map.removeLayer(selectionRect);
-    map.dragging.disable();
-    const start = e.latlng;
+// Update box on map move or zoom
+map.on('move', updateSelectionBox);
+map.on('zoom', updateSelectionBox);
 
-    function onMouseMove(ev) {
-        const dx = ev.latlng.lng - start.lng;
-        const dy = ev.latlng.lat - start.lat;
-        let newLng = start.lng + dx;
-        let newLat = start.lat + (dx / aspectRatio);
+// Update box when width/height changes
+document.getElementById('mapWidth').addEventListener('change', updateSelectionBox);
+document.getElementById('mapHeight').addEventListener('change', updateSelectionBox);
 
-        if (Math.abs(dy) > Math.abs(dx / aspectRatio)) {
-            newLat = start.lat + dy;
-            newLng = start.lng + dy * aspectRatio;
-        }
+// Initial draw
+updateSelectionBox();
 
-        const bounds = L.latLngBounds(start, L.latLng(newLat, newLng));
-        if (selectionRect) map.removeLayer(selectionRect);
-        selectionRect = L.rectangle(bounds, {color: "#ff7800", weight: 1});
-        selectionRect.addTo(map);
-    }
-
-    function onMouseUp() {
-        map.dragging.enable();
-        map.off('mousemove', onMouseMove);
-        map.off('mouseup', onMouseUp);
-    }
-
-    map.on('mousemove', onMouseMove);
-    map.on('mouseup', onMouseUp);
-});
-
-// Heightmap download (placeholder using random terrain)
+// Heightmap download (placeholder)
 document.getElementById('downloadHeightmap').addEventListener('click', () => {
-    if (!selectionRect) {
-        alert("Select an area first!");
-        return;
-    }
-
     const width = parseInt(document.getElementById('mapWidth').value);
     const height = parseInt(document.getElementById('mapHeight').value);
 
@@ -65,7 +60,7 @@ document.getElementById('downloadHeightmap').addEventListener('click', () => {
 
     const imgData = ctx.createImageData(width, height);
     for (let i = 0; i < imgData.data.length; i += 4) {
-        const val = Math.floor(Math.random() * 256); // placeholder: random heights
+        const val = Math.floor(Math.random() * 256); // placeholder
         imgData.data[i] = val;
         imgData.data[i + 1] = val;
         imgData.data[i + 2] = val;
@@ -82,10 +77,10 @@ document.getElementById('downloadHeightmap').addEventListener('click', () => {
     });
 });
 
-// Towns and industries export
+// Towns & industries export
 document.getElementById('downloadTowns').addEventListener('click', async () => {
     if (!selectionRect) {
-        alert("Select an area first!");
+        alert("No selection box!");
         return;
     }
 
