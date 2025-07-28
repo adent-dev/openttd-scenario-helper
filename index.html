@@ -2,17 +2,42 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>OpenTTD Scenario Helper</title>
+    <title>OpenTTD Scenario Helper v0.02</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 </head>
 <body>
-    <h1>OpenTTD Scenario Helper</h1>
-    <div id="map"></div>
+    <h1>OpenTTD Scenario Helper v0.02</h1>
+
     <div id="controls">
+        <label>Map Width:
+            <select id="mapWidth">
+                <option>64</option>
+                <option>128</option>
+                <option>256</option>
+                <option selected>512</option>
+                <option>1024</option>
+                <option>2048</option>
+                <option>4096</option>
+            </select>
+        </label>
+        <label>Map Height:
+            <select id="mapHeight">
+                <option>64</option>
+                <option>128</option>
+                <option>256</option>
+                <option>512</option>
+                <option selected>1024</option>
+                <option>2048</option>
+                <option>4096</option>
+            </select>
+        </label>
         <button id="downloadHeightmap">Download Heightmap</button>
         <button id="downloadTowns">Download Towns & Industries</button>
     </div>
+
+    <div id="map"></div>
+
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="script.js"></script>
 </body>
