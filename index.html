@@ -1,35 +1,37 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>OpenTTD Scenario Helper v0.05</title>
-  <link rel="stylesheet" href="styles.css" />
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-sA+rq5yCgYOGz0T0MQu96UmvZ3PBYfka0B6B4bqC0hI="
-    crossorigin=""
-  />
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>OpenTTD Scenario Helper v0.05</title>
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+/>
+<link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <h1>OpenTTD Scenario Helper <span id="version"></span></h1>
+  <h1>
+    OpenTTD Scenario Helper <span id="version"></span>
+  </h1>
 
-  <div>
+  <div class="controls">
     <label for="mapWidth">Map Width:</label>
     <select id="mapWidth"></select>
 
     <label for="mapHeight">Map Height:</label>
     <select id="mapHeight"></select>
 
-    <button id="toggleBox">Select Heightmap</button>
+    <button id="toggleBox">Show Heightmap Selection</button>
   </div>
 
   <div id="map">
     <div id="bbox" style="display:none;"></div>
   </div>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  ></script>
   <script src="app.js"></script>
 </body>
 </html>
