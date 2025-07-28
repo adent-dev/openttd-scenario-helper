@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>OpenTTD Scenario Helper v0.1</title>
+<title>OpenTTD Scenario Helper</title>
 <link
   rel="stylesheet"
   href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -26,11 +26,18 @@
     z-index: 1000;
     border-radius: 4px;
     font-family: sans-serif;
+    font-size: 14px;
+  }
+  #version {
+    display: block;
+    margin-top: 6px;
+    font-size: 12px;
+    color: #666;
   }
   #selection-box {
     position: absolute;
     border: 3px solid orange;
-    pointer-events: none; /* let map interactions pass through */
+    pointer-events: none;
     box-sizing: border-box;
     top: 50%;
     left: 50%;
@@ -72,6 +79,12 @@
   </label>
   <br />
   <button id="toggleBoxBtn">Select Heightmap</button>
+  <button id="getBoundsBtn">Get Bounds</button>
+  <button id="exportBtn">Export JSON</button>
+  <input type="file" id="importFile" style="display:none" accept="application/json">
+  <button id="importBtn">Import JSON</button>
+  <button id="toggleSavedBoundsBtn">Toggle Saved Bounds</button>
+  <span id="version"></span>
 </div>
 
 <div id="selection-box"></div>
@@ -81,6 +94,9 @@
   crossorigin=""
 ></script>
 <script>
+  const APP_VERSION = "v0.1.4";
+  document.getElementById('version').textContent = APP_VERSION;
+
   const map = L.map('map').setView([20, 0], 2);
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -89,10 +105,17 @@
 
   const selectionBox = document.getElementById('selection-box');
   const toggleBoxBtn = document.getElementById('toggleBoxBtn');
+  const getBoundsBtn = document.getElementById('getBoundsBtn');
+  const exportBtn = document.getElementById('exportBtn');
+  const importBtn = document.getElementById('importBtn');
+  const importFile = document.getElementById('importFile');
+  const toggleSavedBoundsBtn = document.getElementById('toggleSavedBoundsBtn');
   const mapWidthInput = document.getElementById('mapWidth');
   const mapHeightInput = document.getElementById('mapHeight');
 
   let boxVisible = false;
+  let savedBoundsLayer = null;
+  let savedBoundsVisible = true;
 
   function updateSelectionBoxSize() {
     const widthTiles = parseInt(mapWidthInput.value, 10) || 1;
@@ -135,6 +158,123 @@
   });
   window.addEventListener('resize', () => {
     if (boxVisible) updateSelectionBoxSize();
+  });
+
+  function getBoundingBoxLatLng() {
+    const box = selectionBox.getBoundingClientRect();
+    const mapContainer = map.getContainer().getBoundingClientRect();
+
+    const left = box.left - mapContainer.left;
+    const right = box.right - mapContainer.left;
+    const top = box.top - mapContainer.top;
+    const bottom = box.bottom - mapContainer.top;
+
+    const nw = map.containerPointToLatLng([left, top]);
+    const se = map.containerPointToLatLng([right, bottom]);
+
+    return { nw, se };
+  }
+
+  function drawSavedBounds(nw, se) {
+    if (savedBoundsLayer) {
+      map.removeLayer(savedBoundsLayer);
+    }
+    savedBoundsLayer = L.rectangle([[nw.lat, nw.lng], [se.lat, se.lng]], {
+      color: 'blue',
+      weight: 2,
+      fillOpacity: 0.2
+    }).addTo(map);
+    if (!savedBoundsVisible) {
+      map.removeLayer(savedBoundsLayer);
+    }
+  }
+
+  getBoundsBtn.addEventListener('click', () => {
+    if (!boxVisible) {
+      alert("Please enable the heightmap selection box first.");
+      return;
+    }
+
+    const { nw, se } = getBoundingBoxLatLng();
+
+    alert(`Bounding Box:\nNW: ${nw.lat.toFixed(4)}, ${nw.lng.toFixed(4)}\nSE: ${se.lat.toFixed(4)}, ${se.lng.toFixed(4)}`);
+  });
+
+  exportBtn.addEventListener('click', () => {
+    if (!boxVisible) {
+      alert("Enable the selection box first.");
+      return;
+    }
+
+    const { nw, se } = getBoundingBoxLatLng();
+    const data = {
+      version: APP_VERSION,
+      mapWidth: mapWidthInput.value,
+      mapHeight: mapHeightInput.value,
+      bounds: { nw, se },
+      center: map.getCenter(),
+      zoom: map.getZoom()
+    };
+
+    drawSavedBounds(nw, se);
+
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "openttd_map_selection.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  importBtn.addEventListener('click', () => {
+    importFile.click();
+  });
+
+  importFile.addEventListener('change', (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target.result);
+
+        mapWidthInput.value = data.mapWidth;
+        mapHeightInput.value = data.mapHeight;
+
+        if (data.center && data.zoom) {
+          map.setView([data.center.lat, data.center.lng], data.zoom);
+        }
+
+        if (data.bounds && data.bounds.nw && data.bounds.se) {
+          drawSavedBounds(data.bounds.nw, data.bounds.se);
+        }
+
+        if (!boxVisible) {
+          boxVisible = true;
+          selectionBox.style.display = 'block';
+          toggleBoxBtn.textContent = 'Hide Heightmap';
+        }
+
+        updateSelectionBoxSize();
+        alert("Map selection imported successfully!");
+      } catch (err) {
+        alert("Invalid JSON file.");
+      }
+    };
+    reader.readAsText(file);
+  });
+
+  toggleSavedBoundsBtn.addEventListener('click', () => {
+    savedBoundsVisible = !savedBoundsVisible;
+    if (savedBoundsLayer) {
+      if (savedBoundsVisible) {
+        map.addLayer(savedBoundsLayer);
+      } else {
+        map.removeLayer(savedBoundsLayer);
+      }
+    }
   });
 </script>
 </body>
