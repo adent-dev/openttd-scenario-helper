@@ -1,19 +1,35 @@
 html, body {
-  height: 100%;
-  margin: 0;
-  padding: 0;
+  margin: 0; padding: 0; height: 100%;
+  font-family: Arial, sans-serif;
 }
 
 #map {
-  width: 100vw;
   height: 100vh;
+  width: 100vw;
   position: relative;
 }
 
 #bbox {
   position: absolute;
-  border: 2px solid red;
+  border: 3px solid red;
   pointer-events: none;
   box-sizing: border-box;
-  z-index: 1000;
+  z-index: 9999;
+}
+
+.controls {
+  padding: 10px;
+  background: #eee;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.controls label {
+  font-weight: bold;
+}
+
+.controls select, .controls button {
+  font-size: 1em;
+  padding: 5px 8px;
 }
