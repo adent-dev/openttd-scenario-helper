@@ -1,23 +1,44 @@
-// Initialize Leaflet map
+// Initialize map
 const map = L.map('map').setView([20, 0], 2);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap contributors'
 }).addTo(map);
 
-// Selection rectangle
-let bounds;
+let selectionRect = null;
+let aspectRatio = 512 / 1024; // default width / height
+
+function updateAspectRatio() {
+    const width = parseInt(document.getElementById('mapWidth').value);
+    const height = parseInt(document.getElementById('mapHeight').value);
+    aspectRatio = width / height;
+}
+document.getElementById('mapWidth').addEventListener('change', updateAspectRatio);
+document.getElementById('mapHeight').addEventListener('change', updateAspectRatio);
+
+// Selection logic
 map.on('mousedown', function (e) {
-    if (bounds) map.removeLayer(bounds);
+    if (selectionRect) map.removeLayer(selectionRect);
     map.dragging.disable();
     const start = e.latlng;
 
     function onMouseMove(ev) {
-        if (bounds) map.removeLayer(bounds);
-        bounds = L.rectangle(L.latLngBounds(start, ev.latlng), {color: "#ff7800", weight: 1});
-        bounds.addTo(map);
+        const dx = ev.latlng.lng - start.lng;
+        const dy = ev.latlng.lat - start.lat;
+        let newLng = start.lng + dx;
+        let newLat = start.lat + (dx / aspectRatio);
+
+        if (Math.abs(dy) > Math.abs(dx / aspectRatio)) {
+            newLat = start.lat + dy;
+            newLng = start.lng + dy * aspectRatio;
+        }
+
+        const bounds = L.latLngBounds(start, L.latLng(newLat, newLng));
+        if (selectionRect) map.removeLayer(selectionRect);
+        selectionRect = L.rectangle(bounds, {color: "#ff7800", weight: 1});
+        selectionRect.addTo(map);
     }
 
-    function onMouseUp(ev) {
+    function onMouseUp() {
         map.dragging.enable();
         map.off('mousemove', onMouseMove);
         map.off('mouseup', onMouseUp);
@@ -27,24 +48,48 @@ map.on('mousedown', function (e) {
     map.on('mouseup', onMouseUp);
 });
 
-// Download heightmap (placeholder)
-document.getElementById('downloadHeightmap').addEventListener('click', async () => {
-    if (!bounds) {
+// Heightmap download (placeholder using random terrain)
+document.getElementById('downloadHeightmap').addEventListener('click', () => {
+    if (!selectionRect) {
         alert("Select an area first!");
         return;
     }
 
-    alert("Heightmap generation is a placeholder in this version.\nIn the next version, we'll fetch real elevation data.");
+    const width = parseInt(document.getElementById('mapWidth').value);
+    const height = parseInt(document.getElementById('mapHeight').value);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+
+    const imgData = ctx.createImageData(width, height);
+    for (let i = 0; i < imgData.data.length; i += 4) {
+        const val = Math.floor(Math.random() * 256); // placeholder: random heights
+        imgData.data[i] = val;
+        imgData.data[i + 1] = val;
+        imgData.data[i + 2] = val;
+        imgData.data[i + 3] = 255;
+    }
+    ctx.putImageData(imgData, 0, 0);
+
+    canvas.toBlob(blob => {
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "heightmap.png";
+        a.click();
+        URL.revokeObjectURL(a.href);
+    });
 });
 
-// Download towns and industries
+// Towns and industries export
 document.getElementById('downloadTowns').addEventListener('click', async () => {
-    if (!bounds) {
+    if (!selectionRect) {
         alert("Select an area first!");
         return;
     }
 
-    const bbox = bounds.getBounds();
+    const bbox = selectionRect.getBounds();
     const query = `
         [out:json];
         (
