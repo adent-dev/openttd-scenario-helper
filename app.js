@@ -1,5 +1,7 @@
 const VERSION = '0.05';
 
+const sizes = [64, 128, 256, 512, 1024, 2048, 4096];
+
 const mapDiv = document.getElementById('map');
 const bboxDiv = document.getElementById('bbox');
 const toggleBoxBtn = document.getElementById('toggleBox');
@@ -9,60 +11,51 @@ const versionSpan = document.getElementById('version');
 
 let boxVisible = false;
 
-// Common OpenTTD map sizes
-const sizes = [64, 128, 256, 512, 1024, 2048, 4096];
-
-// Populate width and height selects with same options
-function populateSelects() {
-  sizes.forEach(size => {
-    const optionW = document.createElement('option');
-    optionW.value = size;
-    optionW.textContent = size;
-    mapWidthSelect.appendChild(optionW);
-
-    const optionH = document.createElement('option');
-    optionH.value = size;
-    optionH.textContent = size;
-    mapHeightSelect.appendChild(optionH);
+function populateSelect(select) {
+  sizes.forEach((size) => {
+    const option = document.createElement('option');
+    option.value = size;
+    option.textContent = size;
+    select.appendChild(option);
   });
-
-  // Default selection
-  mapWidthSelect.value = '512';
-  mapHeightSelect.value = '512';
 }
 
-// Initialize Leaflet map with OpenStreetMap tiles
+// Initialize dropdowns
+populateSelect(mapWidthSelect);
+populateSelect(mapHeightSelect);
+mapWidthSelect.value = '512';
+mapHeightSelect.value = '512';
+
 const map = L.map('map').setView([40, 0], 2);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19,
   attribution: '© OpenStreetMap contributors'
 }).addTo(map);
 
-// Update bounding box size and position
 function updateBoundingBox() {
   if (!boxVisible) {
     bboxDiv.style.display = 'none';
     return;
   }
-
   bboxDiv.style.display = 'block';
-
-  const mapRect = mapDiv.getBoundingClientRect();
 
   const w = parseInt(mapWidthSelect.value, 10);
   const h = parseInt(mapHeightSelect.value, 10);
 
-  // Max size 80% of map container size
-  const maxW = mapRect.width * 0.8;
-  const maxH = mapRect.height * 0.8;
+  // Get map container size
+  const mapRect = mapDiv.getBoundingClientRect();
 
-  // Calculate scale to fit bounding box within max size, preserving aspect ratio
-  const scale = Math.min(maxW / w, maxH / h);
+  // Max bounding box 80% of map size
+  const maxWidth = mapRect.width * 0.8;
+  const maxHeight = mapRect.height * 0.8;
+
+  // Calculate scale to fit bounding box inside map container preserving aspect ratio
+  const scale = Math.min(maxWidth / w, maxHeight / h);
 
   const boxWidth = w * scale;
   const boxHeight = h * scale;
 
-  // Center bounding box inside the map container
+  // Position bbox centered inside map container
   bboxDiv.style.width = `${boxWidth}px`;
   bboxDiv.style.height = `${boxHeight}px`;
   bboxDiv.style.left = `${(mapRect.width - boxWidth) / 2}px`;
@@ -71,31 +64,19 @@ function updateBoundingBox() {
 
 function toggleBoundingBox() {
   boxVisible = !boxVisible;
+  toggleBoxBtn.textContent = boxVisible ? 'Hide Heightmap Selection' : 'Show Heightmap Selection';
   updateBoundingBox();
-  toggleBoxBtn.textContent = boxVisible ? 'Hide Heightmap Selection' : 'Select Heightmap';
 }
 
 function onResize() {
   updateBoundingBox();
 }
 
-// Initialize UI and event handlers
-function init() {
-  populateSelects();
+toggleBoxBtn.addEventListener('click', toggleBoundingBox);
+mapWidthSelect.addEventListener('change', updateBoundingBox);
+mapHeightSelect.addEventListener('change', updateBoundingBox);
+window.addEventListener('resize', onResize);
+map.on('resize', onResize);
 
-  toggleBoxBtn.addEventListener('click', toggleBoundingBox);
-
-  mapWidthSelect.addEventListener('change', updateBoundingBox);
-  mapHeightSelect.addEventListener('change', updateBoundingBox);
-
-  window.addEventListener('resize', onResize);
-  map.on('resize', onResize);
-  map.on('moveend', () => {
-    // Bounding box is static overlay, no reposition needed on map pan/zoom
-  });
-
-  // Show version
-  versionSpan.textContent = `v${VERSION}`;
-}
-
-init();
+// Display version
+versionSpan.textContent = `v${VERSION}`;
