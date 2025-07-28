@@ -1,4 +1,4 @@
-const APP_VERSION = "v0.04.01";
+const APP_VERSION = "v0.04.02";
 
 // Set version in UI
 document.getElementById("page-title").innerText = `OpenTTD Scenario Helper ${APP_VERSION}`;
@@ -16,9 +16,9 @@ function drawSelectionBox() {
     const heightTiles = parseInt(document.getElementById('mapHeight').value);
     const center = map.getCenter();
 
-    // Correct aspect ratio: longitude degrees shrink by cos(latitude)
+    // Correct aspect ratio: longitude shrinks by cos(latitude)
     const latCorrection = Math.cos(center.lat * Math.PI / 180);
-    const aspectRatio = (widthTiles / heightTiles) / latCorrection;
+    const aspectRatio = (widthTiles / heightTiles) * latCorrection;
 
     const scale = 0.5; // controls box size relative to map view
     const halfLat = scale;
@@ -42,5 +42,3 @@ map.on('zoomend', drawSelectionBox);
 
 // Initial draw
 drawSelectionBox();
-
-// Placeholder heightmap & towns export remain unchanged...
