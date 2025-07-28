@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>OpenTTD Map Selector Prototype</title>
+<title>OpenTTD Map Selector Prototype - Fixed Aspect Ratio</title>
 
 <!-- Leaflet CSS -->
 <link
@@ -59,6 +59,20 @@
     background: #f3f5a8;
   }
 
+  label {
+    margin-top: 10px;
+    font-weight: bold;
+  }
+
+  input[type="number"] {
+    width: 80px;
+    padding: 4px 6px;
+    margin: 6px 4px 6px 0;
+    font-size: 14px;
+    border: 2px inset #6a4a00;
+    background: #fff;
+  }
+
   #coords {
     background: #fff;
     border: 2px inset #6a4a00;
@@ -78,7 +92,14 @@
 <body>
   <div id="sidebar">
     <h1>OpenTTD Map Selector</h1>
-    <p>Select an area on the map by dragging a rectangle.</p>
+    <p>Set map size, then drag the rectangle to select the area.</p>
+
+    <label for="mapWidth">Map Width (tiles):</label>
+    <input type="number" id="mapWidth" min="1" value="128" />
+
+    <label for="mapHeight">Map Height (tiles):</label>
+    <input type="number" id="mapHeight" min="1" value="128" />
+
     <button id="clearBtn">Clear Selection</button>
     <button id="generateBtn">Generate Heightmap</button>
 
@@ -99,61 +120,69 @@
 
   <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <!-- Leaflet Draw plugin for rectangle drawing -->
-  <link
-    rel="stylesheet"
-    href="https://cdn.jsdelivr.net/npm/leaflet-draw@1.0.4/dist/leaflet.draw.css"
-  />
-  <script src="https://cdn.jsdelivr.net/npm/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+  <!-- Leaflet Path Drag plugin -->
+  <script src="https://cdn.jsdelivr.net/npm/leaflet-path-drag@0.0.15/Leaflet.Path.Drag.min.js"></script>
 
   <script>
-    // Initialize map
     const map = L.map('map').setView([52.5, 13.4], 6); // Centered on Europe
 
-    // Add OpenStreetMap tiles
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution:
         '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     }).addTo(map);
 
-    // FeatureGroup to store editable layers
-    const drawnItems = new L.FeatureGroup();
-    map.addLayer(drawnItems);
-
-    // Add draw control with only rectangle enabled
-    const drawControl = new L.Control.Draw({
-      draw: {
-        polygon: false,
-        polyline: false,
-        circle: false,
-        circlemarker: false,
-        marker: false,
-        rectangle: {
-          shapeOptions: {
-            color: '#6a4a00',
-            weight: 3,
-            fillOpacity: 0.2,
-          },
-        },
-      },
-      edit: {
-        featureGroup: drawnItems,
-        edit: true,
-        remove: true,
-      },
-    });
-    map.addControl(drawControl);
-
     const coordsDiv = document.getElementById('coords');
-    let selectedRect = null;
+    const clearBtn = document.getElementById('clearBtn');
+    const generateBtn = document.getElementById('generateBtn');
+    const mapWidthInput = document.getElementById('mapWidth');
+    const mapHeightInput = document.getElementById('mapHeight');
 
-    function updateCoords(rect) {
-      if (!rect) {
+    let rect = null;
+
+    // Helper: convert degrees latitude difference to meters roughly
+    // Latitude degrees ~ 111 km each, longitude depends on latitude
+    function latToMeters(latDiff) {
+      return latDiff * 111000;
+    }
+    function metersToLat(meters) {
+      return meters / 111000;
+    }
+
+    // Helper: convert degrees longitude difference to meters at given latitude
+    function lonToMeters(lonDiff, lat) {
+      return lonDiff * (111320 * Math.cos((lat * Math.PI) / 180));
+    }
+    function metersToLon(meters, lat) {
+      return meters / (111320 * Math.cos((lat * Math.PI) / 180));
+    }
+
+    // Given center latlng and mapWidth/mapHeight in tiles (assume each tile 32px, or define scale),
+    // calculate LatLngBounds for rectangle, maintaining aspect ratio,
+    // scaled to a fixed size in meters on the ground (e.g., ~30km width at zoom level 6)
+    // For simplicity, define that 1 tile ~ 500 meters on ground (tunable)
+    const TILE_SIZE_METERS = 500;
+
+    function createBoundsFromCenter(center, widthTiles, heightTiles) {
+      const widthMeters = widthTiles * TILE_SIZE_METERS;
+      const heightMeters = heightTiles * TILE_SIZE_METERS;
+
+      const lat = center.lat;
+      // Convert meters to lat/lon degrees
+      const latDiff = metersToLat(heightMeters) / 2;
+      const lonDiff = metersToLon(widthMeters, lat) / 2;
+
+      return L.latLngBounds(
+        [lat - latDiff, center.lng - lonDiff],
+        [lat + latDiff, center.lng + lonDiff]
+      );
+    }
+
+    function updateCoords(bounds) {
+      if (!bounds) {
         coordsDiv.textContent = 'No area selected.';
         return;
       }
-      const bounds = rect.getBounds();
       const ne = bounds.getNorthEast();
       const sw = bounds.getSouthWest();
       coordsDiv.textContent =
@@ -161,42 +190,63 @@
         `SouthWest (lat, lon): ${sw.lat.toFixed(6)}, ${sw.lng.toFixed(6)}`;
     }
 
-    map.on(L.Draw.Event.CREATED, function (event) {
-      // Remove previous rectangle
-      drawnItems.clearLayers();
-      const layer = event.layer;
-      drawnItems.addLayer(layer);
-      selectedRect = layer;
-      updateCoords(layer);
+    // Create or update rectangle on map
+    function updateRectangle() {
+      const width = parseInt(mapWidthInput.value);
+      const height = parseInt(mapHeightInput.value);
+      if (width <= 0 || height <= 0) {
+        alert('Map width and height must be positive numbers.');
+        return;
+      }
+
+      const center = rect ? rect.getBounds().getCenter() : map.getCenter();
+      const bounds = createBoundsFromCenter(center, width, height);
+
+      if (rect) {
+        rect.setBounds(bounds);
+      } else {
+        rect = L.rectangle(bounds, {
+          color: '#6a4a00',
+          weight: 3,
+          fillOpacity: 0.2,
+          draggable: true,
+        });
+        rect.addTo(map);
+
+        // Enable dragging using Leaflet.Path.Drag plugin
+        rect.dragging.enable();
+
+        // Update coordinates on drag
+        rect.on('drag', function () {
+          updateCoords(rect.getBounds());
+        });
+      }
+      updateCoords(bounds);
+    }
+
+    // Initialize rectangle on load
+    updateRectangle();
+
+    // When map size inputs change, update rectangle size (keeping center fixed)
+    mapWidthInput.addEventListener('change', updateRectangle);
+    mapHeightInput.addEventListener('change', updateRectangle);
+
+    // Clear selection
+    clearBtn.addEventListener('click', () => {
+      if (rect) {
+        map.removeLayer(rect);
+        rect = null;
+        updateCoords(null);
+      }
     });
 
-    map.on(L.Draw.Event.EDITED, function (event) {
-      const layers = event.layers;
-      layers.eachLayer(function (layer) {
-        selectedRect = layer;
-        updateCoords(layer);
-      });
-    });
-
-    map.on(L.Draw.Event.DELETED, function (event) {
-      selectedRect = null;
-      updateCoords(null);
-    });
-
-    // Clear button
-    document.getElementById('clearBtn').addEventListener('click', () => {
-      drawnItems.clearLayers();
-      selectedRect = null;
-      updateCoords(null);
-    });
-
-    // Generate button - mock function: output JSON of bounds or alert if none selected
-    document.getElementById('generateBtn').addEventListener('click', () => {
-      if (!selectedRect) {
+    // Generate mock export of selected bounds
+    generateBtn.addEventListener('click', () => {
+      if (!rect) {
         alert('Please select an area first!');
         return;
       }
-      const bounds = selectedRect.getBounds();
+      const bounds = rect.getBounds();
       const data = {
         northEast: {
           lat: bounds.getNorthEast().lat,
@@ -206,8 +256,10 @@
           lat: bounds.getSouthWest().lat,
           lon: bounds.getSouthWest().lng,
         },
+        mapWidthTiles: parseInt(mapWidthInput.value),
+        mapHeightTiles: parseInt(mapHeightInput.value),
       };
-      // For now, just output JSON to console and prompt download
+
       console.log('Heightmap area data:', data);
 
       const dataStr =
@@ -218,6 +270,10 @@
       dlAnchorElem.setAttribute('download', 'heightmap_area.json');
       dlAnchorElem.click();
     });
+
+    // Optional: update rectangle position if map is moved (kept fixed size)
+    // (Not mandatory, rectangle stays where dragged)
+
   </script>
 </body>
 </html>
