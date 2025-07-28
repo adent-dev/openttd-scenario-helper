@@ -5,51 +5,49 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 
 let selectionRect = null;
 
-function updateSelectionBox() {
-    const width = parseInt(document.getElementById('mapWidth').value);
-    const height = parseInt(document.getElementById('mapHeight').value);
-    const aspectRatio = width / height;
+function drawSelectionBox() {
+    const widthTiles = parseInt(document.getElementById('mapWidth').value);
+    const heightTiles = parseInt(document.getElementById('mapHeight').value);
+    const aspectRatio = widthTiles / heightTiles;
 
-    // Get current map center
     const center = map.getCenter();
-    const bounds = map.getBounds();
-    const latDiff = Math.abs(bounds.getNorth() - bounds.getSouth());
-    const lngDiff = Math.abs(bounds.getEast() - bounds.getWest());
 
-    // We’ll base box size on 60% of the smaller map dimension, scaled by aspect ratio
-    let boxLat = latDiff * 0.3;
-    let boxLng = boxLat * aspectRatio;
+    // Use zoom level to determine box size in degrees (approximation)
+    const scale = 0.05; // smaller value = larger box; tweak if needed
+    let halfLat = scale;
+    let halfLng = halfLat * aspectRatio;
 
-    if (boxLng > lngDiff * 0.6) {
-        boxLng = lngDiff * 0.3;
-        boxLat = boxLng / aspectRatio;
-    }
-
-    const boxBounds = L.latLngBounds(
-        [center.lat - boxLat, center.lng - boxLng],
-        [center.lat + boxLat, center.lng + boxLng]
+    const bounds = L.latLngBounds(
+        [center.lat - halfLat, center.lng - halfLng],
+        [center.lat + halfLat, center.lng + halfLng]
     );
 
-    if (selectionRect) {
-        map.removeLayer(selectionRect);
-    }
-    selectionRect = L.rectangle(boxBounds, {color: "#ff7800", weight: 2});
+    if (selectionRect) map.removeLayer(selectionRect);
+    selectionRect = L.rectangle(bounds, {color: "#ff7800", weight: 2});
     selectionRect.addTo(map);
 }
 
-// Update box on map move or zoom
-map.on('move', updateSelectionBox);
-map.on('zoom', updateSelectionBox);
+// Redraw when width/height changes
+document.getElementById('mapWidth').addEventListener('change', drawSelectionBox);
+document.getElementById('mapHeight').addEventListener('change', drawSelectionBox);
 
-// Update box when width/height changes
-document.getElementById('mapWidth').addEventListener('change', updateSelectionBox);
-document.getElementById('mapHeight').addEventListener('change', updateSelectionBox);
+// Redraw when map moves or zooms, keeping box centered
+map.on('moveend', () => {
+    drawSelectionBox();
+});
+map.on('zoomend', () => {
+    drawSelectionBox();
+});
 
 // Initial draw
-updateSelectionBox();
+drawSelectionBox();
 
 // Heightmap download (placeholder)
 document.getElementById('downloadHeightmap').addEventListener('click', () => {
+    if (!selectionRect) {
+        alert("No selection box!");
+        return;
+    }
     const width = parseInt(document.getElementById('mapWidth').value);
     const height = parseInt(document.getElementById('mapHeight').value);
 
@@ -60,7 +58,7 @@ document.getElementById('downloadHeightmap').addEventListener('click', () => {
 
     const imgData = ctx.createImageData(width, height);
     for (let i = 0; i < imgData.data.length; i += 4) {
-        const val = Math.floor(Math.random() * 256); // placeholder
+        const val = Math.floor(Math.random() * 256); // placeholder terrain
         imgData.data[i] = val;
         imgData.data[i + 1] = val;
         imgData.data[i + 2] = val;
