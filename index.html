@@ -1,44 +1,120 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title id="page-title">OpenTTD Scenario Helper</title>
-    <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>OpenTTD Scenario Helper v0.1</title>
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+/>
+<style>
+  html, body, #map {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+  }
+  #map {
+    position: relative;
+  }
+  #controls {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background: rgba(255 255 255 / 0.9);
+    padding: 8px;
+    z-index: 1000;
+    border-radius: 4px;
+    font-family: sans-serif;
+  }
+  #selection-box {
+    position: absolute;
+    border: 3px solid orange;
+    pointer-events: none; /* let map interactions pass through */
+    box-sizing: border-box;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: none;
+    z-index: 999;
+  }
+</style>
 </head>
 <body>
-    <h1 id="app-header">OpenTTD Scenario Helper</h1>
+<div id="map"></div>
 
-    <div id="controls">
-        <label>Map Width:
-            <select id="mapWidth">
-                <option>64</option>
-                <option>128</option>
-                <option>256</option>
-                <option selected>512</option>
-                <option>1024</option>
-                <option>2048</option>
-                <option>4096</option>
-            </select>
-        </label>
-        <label>Map Height:
-            <select id="mapHeight">
-                <option>64</option>
-                <option>128</option>
-                <option>256</option>
-                <option>512</option>
-                <option selected>1024</option>
-                <option>2048</option>
-                <option>4096</option>
-            </select>
-        </label>
-        <button id="downloadHeightmap">Download Heightmap</button>
-        <button id="downloadTowns">Download Towns & Industries</button>
-    </div>
+<div id="controls">
+  <label>
+    Width (tiles):
+    <input type="number" id="mapWidth" value="512" min="1" />
+  </label>
+  <br />
+  <label>
+    Height (tiles):
+    <input type="number" id="mapHeight" value="512" min="1" />
+  </label>
+  <br />
+  <button id="toggleBoxBtn">Select Heightmap</button>
+</div>
 
-    <div id="map"></div>
+<div id="selection-box"></div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="script.js"></script>
-</body>
-</html>
+<script
+  src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  crossorigin=""
+></script>
+<script>
+  const map = L.map('map').setView([20, 0], 2);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(map);
+
+  const selectionBox = document.getElementById('selection-box');
+  const toggleBoxBtn = document.getElementById('toggleBoxBtn');
+  const mapWidthInput = document.getElementById('mapWidth');
+  const mapHeightInput = document.getElementById('mapHeight');
+
+  let boxVisible = false;
+
+  function updateSelectionBoxSize() {
+    const widthTiles = parseInt(mapWidthInput.value, 10) || 1;
+    const heightTiles = parseInt(mapHeightInput.value, 10) || 1;
+
+    // Calculate aspect ratio (width / height)
+    const aspectRatio = widthTiles / heightTiles;
+
+    // Get viewport size
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    let boxWidth, boxHeight;
+
+    // Fit box inside viewport keeping aspect ratio, max 80% of viewport size
+    if (vw / vh > aspectRatio) {
+      // viewport wider than box → limit by height
+      boxHeight = vh * 0.8;
+      boxWidth = boxHeight * aspectRatio;
+    } else {
+      // viewport taller than box → limit by width
+      boxWidth = vw * 0.8;
+      boxHeight = boxWidth / aspectRatio;
+    }
+
+    selectionBox.style.width = `${boxWidth}px`;
+    selectionBox.style.height = `${boxHeight}px`;
+  }
+
+  toggleBoxBtn.addEventListener('click', () => {
+    boxVisible = !boxVisible;
+    selectionBox.style.display = boxVisible ? 'block' : 'none';
+    toggleBoxBtn.textContent = boxVisible ? 'Hide Heightmap' : 'Select Heightmap';
+
+    if (boxVisible) {
+      updateSelectionBoxSize();
+    }
+  });
+
+  // Update box size if inputs or window size change (and box is visible)
+  mapWidthInput.addEventListener('input', () => {
+    if (boxVisible) updateSelectionBoxSize();
